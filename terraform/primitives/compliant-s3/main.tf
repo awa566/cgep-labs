@@ -83,3 +83,60 @@ resource "aws_s3_bucket_public_access_block" "primary" {
   block_public_policy     = true
   restrict_public_buckets = true
 }
+
+# ---------------------------------------------------------------
+# Log bucket: a separate, locked-down home for access logs
+# AU-6 (audit review): logs are kept apart from the data they describe
+# ---------------------------------------------------------------
+resource "aws_s3_bucket" "log_bucket" {
+  bucket = local.log_bucket_name
+}
+
+# Turn on ACLs for this bucket only, so the log-delivery service can be granted write access
+resource "aws_s3_bucket_ownership_controls" "log_bucket" {
+  bucket = aws_s3_bucket.log_bucket.id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+# Allow AWS's log-delivery service to write logs here (nothing else)
+resource "aws_s3_bucket_acl" "log_bucket" {
+  depends_on = [aws_s3_bucket_ownership_controls.log_bucket]
+
+  bucket = aws_s3_bucket.log_bucket.id
+  acl    = "log-delivery-write"
+}
+
+# SC-28: logs are encrypted too
+resource "aws_s3_bucket_server_side_encryption_configuration" "log_bucket" {
+  bucket = aws_s3_bucket.log_bucket.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# AC-3: logs can never be made public
+resource "aws_s3_bucket_public_access_block" "log_bucket" {
+  bucket = aws_s3_bucket.log_bucket.id
+
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = true
+  restrict_public_buckets = true
+}
+
+# ---------------------------------------------------------------
+# AU-3 (audit record content): record every request to the primary
+# bucket and deliver the records to the log bucket
+# ---------------------------------------------------------------
+resource "aws_s3_bucket_logging" "primary" {
+  bucket = aws_s3_bucket.primary.id
+
+  target_bucket = aws_s3_bucket.log_bucket.id
+  target_prefix = "access-logs/"
+}
