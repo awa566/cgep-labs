@@ -35,5 +35,5 @@ jobs:
           python-version: "3.12"
       - name: Install Checkov
         run: pip install checkov
-      - name: Scan Terraform (report-only for now)
-        run: checkov -d terraform --framework terraform --compact --soft-fail
+      - name: Scan Terraform (enforced)
+        run: checkov -d terraform --framework terraform --compact
